@@ -132,13 +132,16 @@ def attention_decoder_fn_inference(output_fn,
                 cell_state = encoder_state
                 # 第0个时间步之前的解码器输出
                 cell_output = array_ops.zeros([num_decoder_symbols], dtype=dtypes.float32)  # [num_decoder_symbols]
-                # 下一步输入的词汇的id转化成词汇的嵌入
+                # 下一步输入的id转化成嵌入
                 word_input = array_ops.gather(embeddings, next_input_id)  # [batch_size, num_embed_units]
 
-                naf_triple_id = array_ops.zeros([batch_size, 2], dtype=dtype)  # [batch_size, 2] 的全 0 矩阵
+                # 解码器输入拼接了这一步使用的三元组
+                # naf_triple_id = array_ops.zeros([batch_size, 2], dtype=dtype)  # [batch_size, 2] 0
                 # imem[1]: [encoder_batch_size, triple_num*triple_len, 3*num_trans_units] 三元组嵌入
-                triple_input = array_ops.gather_nd(imem[1], naf_triple_id)  # [batch_size, 3*num_trans_units]
-                cell_input = array_ops.concat([word_input, triple_input], axis=1)  # [batch_size, num_embed_units+3*num_trans_units]
+                # triple_input = array_ops.gather_nd(imem[1], naf_triple_id)  # [batch_size, 3*num_trans_units]
+                # cell_input = array_ops.concat([word_input, triple_input], axis=1)  # [batch_size, num_embed_units+3*num_trans_units]
+                cell_input = word_input
+
                 # 初始化注意力
                 attention = _init_attention(encoder_state)
                 if imem is not None:  # 如果传入了实体嵌入和词嵌入
@@ -147,66 +150,75 @@ def attention_decoder_fn_inference(output_fn,
             else:
                 # 构建注意力
                 attention = attention_construct_fn(cell_output, attention_keys, attention_values)
-                if type(attention) is tuple:  # 输出 alignment 的情况
+                if type(attention) is tuple:  # 输出了alignments
                     attention, alignment = attention
                     cell_output = attention
-                    alignment = tf.reshape(alignment, [batch_size, -1])  # [batch_size, triple_num*triple_len]
+                    alignment = tf.reshape(alignment, [batch_size, -1])  # [batch_size, triple_num*triple_len]或者[batch_size, decoder_len]
                     selector = selector_fn(cell_output)  # 选择实体词的概率选择器
-                    logit = output_fn(cell_output)  # [batch_size, num_decoder_symbols] 未 softmax 的预测
+                    logit = output_fn(cell_output)  # [batch_size, num_decoder_symbols] 未softmax的预测
                     word_prob = nn_ops.softmax(logit) * (1 - selector)  # [batch_size, num_decoder_symbols] 选择生成词概率
                     entity_prob = alignment * selector  # 选择实体词的概率
 
-                    # 这步操作对生成词和实体词的使用概率进行的一个比较，选择其中概率最大的，从而形成了一个 mask
+                    # [batch_size, 1] 该步是否选择生成词
                     # 1、tf.reduce_max(word_prob, 1): [batch_size] 生成词最大的概率
                     # 2、tf.reduce_max(entity_prob, 1): [batch_size] 实体词最大的概率
                     # 3、greater: [batch_size] 生成词的概率是否大于实体词概率
-                    # 4、cast: [batch_size] 将 bool 值转化成浮点
-                    # 5、reshape(cast): [batch_size， 1] 用生成词则为 1，否则则为0
-                    mask = array_ops.reshape(math_ops.cast(math_ops.greater(tf.reduce_max(word_prob, 1), tf.reduce_max(entity_prob, 1)), dtype=dtypes.float32), [-1,1])
+                    # 4、cast: [batch_size] 将bool值转化成浮点
+                    # 5、reshape(cast): [batch_size, 1] 用生成词则为1，否则则为0
+                    mask = array_ops.reshape(
+                        math_ops.cast(math_ops.greater(tf.reduce_max(word_prob, 1), tf.reduce_max(entity_prob, 1)),
+                                      dtype=dtypes.float32),
+                        [-1, 1])
 
                     # 1、cast(math_ops.argmax(word_prob, 1): [batch_size] 生成词中最大概率的下标
                     # 2、gather: [batch_size， num_embed_units]: 采用的生成词
                     # 3、mask * gather: [batch_size, num_embed_units] 实际采用的生成词
                     # 4、reshape(range(batch_size)): [batch_size, 1]
                     # 5、reshape(cast(argmax(entity_prob, 1))): [batch_size, 1] 实体词中最大概率的下标
-                    # 6、cast: [batch_size, 2] 4、5 两步的结果在第 1 维度上拼接
+                    # 6、concat: [batch_size, 2] 4、5 两步的结果在第1维度上拼接
                     # 7、imem[0]:[batch_size, triple_num*triple_len, num_embed_units]
                     # 8、gather_nd: [batch_size, num_embed_units] 采用的实体词
                     # 9、(1-mask) * gather_nd: 实际采用的生成词
-                    # 10、mask * gather + (1-mask) * gather_nd: [batch_size, num_embed_units] 该时间步的实际输出
-                    word_input = mask * array_ops.gather(embeddings, math_ops.cast(math_ops.argmax(word_prob, 1), dtype=dtype)) \
-                                 + (1 - mask) * array_ops.gather_nd(imem[0], array_ops.concat([array_ops.reshape(math_ops.range(batch_size, dtype=dtype), [-1,1]), array_ops.reshape(math_ops.cast(math_ops.argmax(entity_prob, 1), dtype=dtype), [-1,1])], axis=1))
+                    # 10、mask*gather+(1-mask)*gather_nd: [batch_size, num_embed_units]该时间步的实际输出
+                    word_input = mask * array_ops.gather(embeddings, math_ops.cast(math_ops.argmax(word_prob, 1), dtype=dtype)) + \
+                                 (1-mask)*array_ops.gather_nd(imem[0], array_ops.concat([array_ops.reshape(math_ops.range(batch_size, dtype=dtype), [-1, 1]),
+                                                                                         array_ops.reshape(math_ops.cast(math_ops.argmax(entity_prob, 1), dtype=dtype), [-1, 1])],
+                                                                                     axis=1))
 
                     # 1、reshape(range(batch_size)): [batch_size, 1]
                     # 2、cast(1-mask): [batch_size, 1] 选择实体词的 mask
                     # 3、reshape(argmax(alignment, 1)): [batch_size, 1] 选择实体词的下标
                     # 4、cast(1-mask) * reshape(argmax(alignment, 1)): [batch_size, 1] 选择了实体词，则为实体词下标，否则则为0
                     # 5、concat: [batch_size, 2] 第二个维度的第一个元素为 batch，第二个元素为 indice
-                    indices = array_ops.concat([array_ops.reshape(math_ops.range(batch_size, dtype=dtype), [-1,1]), math_ops.cast(1-mask, dtype=dtype) * tf.reshape(math_ops.cast(math_ops.argmax(alignment, 1), dtype=dtype), [-1, 1])], axis=1)
-
+                    # indices = array_ops.concat([array_ops.reshape(math_ops.range(batch_size, dtype=dtype), [-1, 1]),
+                    #                             math_ops.cast(1-mask, dtype=dtype) *
+                    #                             tf.reshape(math_ops.cast(math_ops.argmax(alignment, 1), dtype=dtype), [-1, 1])],
+                    #                            axis=1)
                     # imem[1]: [encoder_batch_size, triple_num*triple_len, 3*num_trans_units] 三元组嵌入
                     # 使用的三元组嵌入
-                    triple_input = array_ops.gather_nd(imem[1], indices)  # [batch_size, 3*num_trans_units]
+                    # triple_input = array_ops.gather_nd(imem[1], indices)  # [batch_size, 3*num_trans_units]
                     # 下个时间步细胞输入
-                    cell_input = array_ops.concat([word_input, triple_input], axis=1)  # [batch_size, num_embed_units+3*num_trans_units]
+                    # cell_input = array_ops.concat([word_input, triple_input], axis=1)  # [batch_size, num_embed_units+3*num_trans_units]
+                    cell_input = word_input
+
                     mask = array_ops.reshape(math_ops.cast(mask, dtype=dtype), [-1])  # [batch_size] 选择生成词的 mask
 
                     # argmax(word_prob, 1): [batch_size] 生成词下标
                     # mask - 1: [batch_size] 如果取生成词则为 0，如果取实体词则为 -1
                     # argmax(entity_prob, 1): [batch_size] 实体词下标
-                    # input_id: [batch_size] 如果为生成词则 id 为正，如果为实体词则 id 为负
-                    input_id = mask * math_ops.cast(math_ops.argmax(word_prob, 1), dtype=dtype) + (mask - 1) * math_ops.cast(math_ops.argmax(entity_prob, 1), dtype=dtype)
+                    # input_id: [batch_size] 如果为生成词则id为正，如果为实体词则id为负
+                    input_id = mask * math_ops.cast(math_ops.argmax(word_prob, 1), dtype=dtype) + \
+                               (mask - 1) * math_ops.cast(math_ops.argmax(entity_prob, 1), dtype=dtype)
 
                     # 把 input_id 写入 TensorArray
                     context_state = context_state.write(time-1, input_id)
                     # 判断句子是否已经结束
                     done = array_ops.reshape(math_ops.equal(input_id, end_of_sequence_id), [-1])
-                    cell_output = logit  # [batch_size, num_decoder_symbols] 未 softmax 的预测
+                    cell_output = logit  # [batch_size, num_decoder_symbols] 未softmax的预测
                 else:  # 不输出 alignments 的情况
                     cell_output = attention
 
-                    # argmax decoder
-                    cell_output = output_fn(cell_output)  # [batch_size, num_decoder_symbols] 未 softmax 的预测
+                    cell_output = output_fn(cell_output)  # [batch_size, num_decoder_symbols] 未softmax的预测
                     # [batch_size] 最大概率生成词的下标
                     next_input_id = math_ops.cast(
                             math_ops.argmax(cell_output, 1), dtype=dtype)
