@@ -1,7 +1,4 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-import tensorflow as tf
+
 
 from tensorflow.contrib.layers.python.layers import layers
 from tensorflow.python.ops import rnn_cell_impl
