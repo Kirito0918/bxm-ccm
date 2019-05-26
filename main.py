@@ -60,8 +60,8 @@ def prepare_data(path, is_train=True):
                 if idx % 100000 == 0:
                     print('read train file line %d' % idx)
                 data_train.append(json.loads(line))
-                # if idx == 1000:  # 用来删减数据集
-                #     break
+                if idx == 10000:  # 用来删减数据集
+                    break
 
     # 载入验证集
     with open('%s/validset.txt' % path) as f:
