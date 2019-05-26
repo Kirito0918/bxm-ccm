@@ -9,7 +9,7 @@ import time
 import random
 random.seed(time.time())
 from model import Model, _START_VOCAB
-# xiugai2
+# xiugai3
 
 tf.app.flags.DEFINE_boolean("is_train", True, "Set to False to inference.")  # 是否训练
 tf.app.flags.DEFINE_integer("memory_units", 100, "memory vector size.")  # 记忆向量的维度
