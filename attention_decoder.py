@@ -145,7 +145,9 @@ def attention_decoder_fn_inference(output_fn,
                 # 初始化注意力
                 attention = _init_attention(encoder_state)
                 if imem is not None:  # 如果传入了实体嵌入和词嵌入
-                    context_state = tensor_array_ops.TensorArray(dtype=dtypes.int32, tensor_array_name="output_ids_ta", size=maximum_length, dynamic_size=True, infer_shape=False)
+                    context_state = tensor_array_ops.TensorArray(dtype=dtypes.int32, tensor_array_name="output_ids_ta",
+                                                                 size=maximum_length, dynamic_size=True,
+                                                                 infer_shape=False)
             # time >= 1
             else:
                 # 构建注意力
@@ -170,6 +172,7 @@ def attention_decoder_fn_inference(output_fn,
                                       dtype=dtypes.float32),
                         [-1, 1])
 
+                    # [batch_size, num_embed_units] 当前时间步输入的嵌入
                     # 1、cast(math_ops.argmax(word_prob, 1): [batch_size] 生成词中最大概率的下标
                     # 2、gather: [batch_size， num_embed_units]: 采用的生成词
                     # 3、mask * gather: [batch_size, num_embed_units] 实际采用的生成词
@@ -179,12 +182,13 @@ def attention_decoder_fn_inference(output_fn,
                     # 7、imem[0]:[batch_size, triple_num*triple_len, num_embed_units]
                     # 8、gather_nd: [batch_size, num_embed_units] 采用的实体词
                     # 9、(1-mask) * gather_nd: 实际采用的生成词
-                    # 10、mask*gather+(1-mask)*gather_nd: [batch_size, num_embed_units]该时间步的实际输出
+                    # 10、mask*gather+(1-mask)*gather_nd: [batch_size, num_embed_units] 当前时间步输入的嵌入
                     word_input = mask * array_ops.gather(embeddings, math_ops.cast(math_ops.argmax(word_prob, 1), dtype=dtype)) + \
                                  (1-mask)*array_ops.gather_nd(imem[0], array_ops.concat([array_ops.reshape(math_ops.range(batch_size, dtype=dtype), [-1, 1]),
                                                                                          array_ops.reshape(math_ops.cast(math_ops.argmax(entity_prob, 1), dtype=dtype), [-1, 1])],
                                                                                      axis=1))
 
+                    # [batch_size, 2] 当前时间步选择实体词的索引
                     # 1、reshape(range(batch_size)): [batch_size, 1]
                     # 2、cast(1-mask): [batch_size, 1] 选择实体词的 mask
                     # 3、reshape(argmax(alignment, 1)): [batch_size, 1] 选择实体词的下标
@@ -197,12 +201,13 @@ def attention_decoder_fn_inference(output_fn,
                     # imem[1]: [encoder_batch_size, triple_num*triple_len, 3*num_trans_units] 三元组嵌入
                     # 使用的三元组嵌入
                     # triple_input = array_ops.gather_nd(imem[1], indices)  # [batch_size, 3*num_trans_units]
-                    # 下个时间步细胞输入
+                    # 当前时间步单词的嵌入拼上所用三元组的嵌入
                     # cell_input = array_ops.concat([word_input, triple_input], axis=1)  # [batch_size, num_embed_units+3*num_trans_units]
                     cell_input = word_input
 
                     mask = array_ops.reshape(math_ops.cast(mask, dtype=dtype), [-1])  # [batch_size] 选择生成词的 mask
 
+                    # 当前时间步输入的单词id，如果为生成词则id为正，如果为实体词则id为负
                     # argmax(word_prob, 1): [batch_size] 生成词下标
                     # mask - 1: [batch_size] 如果取生成词则为 0，如果取实体词则为 -1
                     # argmax(entity_prob, 1): [batch_size] 实体词下标

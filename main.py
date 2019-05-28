@@ -312,12 +312,12 @@ def test(sess, saver, data_dev, setnum=5000):
     # 载入停用词
     with open('%s/stopwords' % FLAGS.data_dir) as f:
         stopwords = json.loads(f.readline())
-    # 获得记录模型的几个 globe_step
+    # 获得模型的几个step
     steps = get_steps(FLAGS.train_dir)
     low_step = 00000
     high_step = 800000
     with open('%s.res' % FLAGS.inference_path, 'w') as resfile, open('%s.log' % FLAGS.inference_path, 'w') as outfile:
-        # 对最近保存的几次模型都要进行一次下面的操作
+        # 载入step在0-800000之间的所有模型
         for step in [step for step in steps if step > low_step and step < high_step]:
             outfile.write('test for model-%d\n' % step)
             model_path = '%s/checkpoint-%08d' % (FLAGS.train_dir, step)
@@ -352,8 +352,8 @@ def test(sess, saver, data_dev, setnum=5000):
                             break
                     results.append(result)
                 st, ed = ed, ed+FLAGS.batch_size
-            match_entity_sum = [.0] * 4
-            cnt = 0
+            match_entity_sum = [.0] * 4  #
+            cnt = 0  # 
             for post, response, result, match_triples, triples, entities in zip([data['post'] for data in data_dev], [data['response'] for data in data_dev], results, [data['match_triples'] for data in data_dev], [data['all_triples'] for data in data_dev], [data['all_entities'] for data in data_dev]):
                 #
                 setidx = int(cnt / setnum)
