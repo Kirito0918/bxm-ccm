@@ -357,8 +357,7 @@ class Model(object):
 ########                                                                                                             ###
 
         # 初始化训练过程
-        self.learning_rate = tf.Variable(float(learning_rate), 
-                trainable=False, dtype=tf.float32)
+        self.learning_rate = tf.Variable(float(learning_rate), trainable=False, dtype=tf.float32)
 
         # 并没有使用衰退的学习率
         self.learning_rate_decay_op = self.learning_rate.assign(
@@ -378,19 +377,18 @@ class Model(object):
         # 根据 decoder_loss 计算 params 梯度
         gradients = tf.gradients(self.decoder_loss, self.params)
         # 梯度裁剪
-        clipped_gradients, self.gradient_norm = tf.clip_by_global_norm(gradients, 
-                max_gradient_norm)
+        clipped_gradients, self.gradient_norm = tf.clip_by_global_norm(gradients, max_gradient_norm)
         self.update = opt.apply_gradients(zip(clipped_gradients, self.params), 
                 global_step=self.global_step)
 
+        # 记录损失
         tf.summary.scalar('decoder_loss', self.decoder_loss)
         for each in tf.trainable_variables():
-            tf.summary.histogram(each.name, each)
-
+            tf.summary.histogram(each.name, each)  # 记录变量的训练情况
         self.merged_summary_op = tf.summary.merge_all()
         
-        self.saver = tf.train.Saver(write_version=tf.train.SaverDef.V2, 
-                max_to_keep=3, pad_step_number=True, keep_checkpoint_every_n_hours=1.0)
+        self.saver = tf.train.Saver(write_version=tf.train.SaverDef.V2, max_to_keep=3, pad_step_number=True,
+                                    keep_checkpoint_every_n_hours=1.0)
         self.saver_epoch = tf.train.Saver(write_version=tf.train.SaverDef.V2, max_to_keep=1000, pad_step_number=True)
 
     # 打印参数

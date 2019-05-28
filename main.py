@@ -259,16 +259,17 @@ def train(model, sess, data_train):
     outputs = model.step_decoder(sess, batched_data)
     return np.sum(outputs[0])  # 一个 batch 损失之和
 
+# 运行summary
 def generate_summary(model, sess, data_train):
     selected_data = [random.choice(data_train) for i in range(FLAGS.batch_size)]
     batched_data = gen_batched_data(selected_data)
     summary = model.step_decoder(sess, batched_data, forward_only=True, summary=True)[-1]
     return summary
 
-# 验证集上计算 ppx，这部分代码没什么好看的
+# 在验证集上计算ppx
 def evaluate(model, sess, data_dev, summary_writer):
-    loss = np.zeros((1, ))
-    st, ed, times = 0, FLAGS.batch_size, 0
+    loss = np.zeros((1, ))  # 标量
+    st, ed, times = 0, FLAGS.batch_size, 0  # times没用
     while st < len(data_dev):
         selected_data = data_dev[st:ed]
         batched_data = gen_batched_data(selected_data)
@@ -276,14 +277,15 @@ def evaluate(model, sess, data_dev, summary_writer):
         loss += np.sum(outputs[0])
         st, ed = ed, ed+FLAGS.batch_size
         times += 1
-    loss /= len(data_dev)
+    loss /= len(data_dev)  # 验证集上每条数据的损失
+    # 自己添加summary
     summary = tf.Summary()
     summary.value.add(tag='decoder_loss/dev', simple_value=loss)
     summary.value.add(tag='perplexity/dev', simple_value=np.exp(loss))
     summary_writer.add_summary(summary, model.global_step.eval())
-    print('    perplexity on dev set: %.2f' % np.exp(loss))
+    print('perplexity on dev set: %.2f' % np.exp(loss))
 
-# 返回记录模型的几个 globe_step
+# 返回记录模型的几个globe_step
 def get_steps(train_dir):
     a = os.walk(train_dir)
     for root, dirs, files in a:
