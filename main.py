@@ -290,8 +290,8 @@ def get_steps(train_dir):
     a = os.walk(train_dir)
     for root, dirs, files in a:
         if root == train_dir:
-            filenames = files
-
+            filenames = files  # 获得train目录下的所有文件
+    # 给三类保存模型的文件分类
     steps, metafiles, datafiles, indexfiles = [], [], [], []
     for filename in filenames:
         if 'meta' in filename:
@@ -300,18 +300,16 @@ def get_steps(train_dir):
             datafiles.append(filename)
         if 'index' in filename:
             indexfiles.append(filename)
-
     metafiles.sort()
     datafiles.sort()
     indexfiles.sort(reverse=True)
-
     for f in indexfiles:
         steps.append(int(f[11:-6]))
-
+    # 取得每个模型的steps，降序排序
     return steps
 
 def test(sess, saver, data_dev, setnum=5000):
-    # 载入 stopwords
+    # 载入停用词
     with open('%s/stopwords' % FLAGS.data_dir) as f:
         stopwords = json.loads(f.readline())
     # 获得记录模型的几个 globe_step
