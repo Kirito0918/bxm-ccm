@@ -19,10 +19,10 @@ tf.app.flags.DEFINE_integer("embed_units", 300, "Size of word embedding.")  # �
 tf.app.flags.DEFINE_integer("trans_units", 100, "Size of trans embedding.")  # trans嵌入size
 tf.app.flags.DEFINE_integer("units", 512, "Size of each model layer.")  # 每层的size
 tf.app.flags.DEFINE_integer("layers", 2, "Number of layers in the model.")  # 层数
-tf.app.flags.DEFINE_integer("batch_size", 100, "Batch size to use during training.")  # batch_size
+tf.app.flags.DEFINE_integer("batch_size", 16, "Batch size to use during training.")  # batch_size
 tf.app.flags.DEFINE_string("data_dir", "./data", "Data directory")  # 数据的目录
 tf.app.flags.DEFINE_string("train_dir", "./train", "Training directory.")  # 保存模型的目录
-tf.app.flags.DEFINE_integer("per_checkpoint", 1000, "How many steps to do per checkpoint.")  # 每多少步保存一下模型
+tf.app.flags.DEFINE_integer("per_checkpoint", 60, "How many steps to do per checkpoint.")  # 每多少步保存一下模型
 tf.app.flags.DEFINE_integer("inference_version", 0, "The version for inferencing.")  # 推导的版本
 tf.app.flags.DEFINE_boolean("log_parameters", True, "Set to True to show the parameters")  # 是否显示参数
 tf.app.flags.DEFINE_string("inference_path", "test", "Set filename of inference")  # 推导的文件名
@@ -60,18 +60,22 @@ def prepare_data(path, is_train=True):
                 if idx % 100000 == 0:
                     print('read train file line %d' % idx)
                 data_train.append(json.loads(line))
-                if idx == 10000:  # 用来删减数据集
+                if idx == 1000:  # 用来删减数据集
                     break
 
     # 载入验证集
     with open('%s/validset.txt' % path) as f:
-        for line in f:
+        for idx, line in enumerate(f):
             data_dev.append(json.loads(line))
+            if idx == 500:  # 用来删减数据集
+                break
 
     # 载入测试集
     with open('%s/testset.txt' % path) as f:
-        for line in f:
+        for idx, line in enumerate(f):
             data_test.append(json.loads(line))
+            if idx == 500:  # 用来删减数据集
+                break
 
     return raw_vocab, data_train, data_dev, data_test
 
