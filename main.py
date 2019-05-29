@@ -10,7 +10,7 @@ import random
 random.seed(time.time())
 from model import Model, _START_VOCAB
 
-tf.app.flags.DEFINE_boolean("is_train", False, "Set to False to inference.")  # 是否训练
+tf.app.flags.DEFINE_boolean("is_train", True, "Set to False to inference.")  # 是否训练
 tf.app.flags.DEFINE_integer("memory_units", 100, "memory vector size.")  # 记忆向量的维度
 tf.app.flags.DEFINE_integer("symbols", 30000, "vocabulary size.")  # 词汇表size
 tf.app.flags.DEFINE_integer("num_entities", 21471, "entitiy vocabulary size.")  # 实体词汇size
