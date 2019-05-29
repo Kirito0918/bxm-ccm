@@ -196,13 +196,6 @@ class Model(object):
         # self.encoder_state_shape = tf.shape(encoder_state)
 
 ########记忆网络                                                                                                     ###
-        response_encoder_cell = MultiRNNCell([GRUCell(num_units) for _ in range(num_layers)])
-        response_encoder_output, response_encoder_state = tf.nn.dynamic_rnn(response_encoder_cell,
-                                                                            response_word_input,
-                                                                            self.responses_length,
-                                                                            dtype=tf.float32,
-                                                                            scope="response_encoder")
-
         # graph_embed: [batch_size, triple_num, 2*num_trans_units] 静态图向量
         # encoder_state: [num_layers, batch_size, num_units]
         with tf.variable_scope("post_memory_network"):
