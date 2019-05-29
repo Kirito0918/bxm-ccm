@@ -10,7 +10,7 @@ import random
 random.seed(time.time())
 from model import Model, _START_VOCAB
 
-tf.app.flags.DEFINE_boolean("is_train", True, "Set to False to inference.")  # 是否训练
+tf.app.flags.DEFINE_boolean("is_train", False, "Set to False to inference.")  # 是否训练
 tf.app.flags.DEFINE_integer("memory_units", 100, "memory vector size.")  # 记忆向量的维度
 tf.app.flags.DEFINE_integer("symbols", 30000, "vocabulary size.")  # 词汇表size
 tf.app.flags.DEFINE_integer("num_entities", 21471, "entitiy vocabulary size.")  # 实体词汇size
@@ -19,10 +19,10 @@ tf.app.flags.DEFINE_integer("embed_units", 300, "Size of word embedding.")  # �
 tf.app.flags.DEFINE_integer("trans_units", 100, "Size of trans embedding.")  # trans嵌入size
 tf.app.flags.DEFINE_integer("units", 512, "Size of each model layer.")  # 每层的size
 tf.app.flags.DEFINE_integer("layers", 2, "Number of layers in the model.")  # 层数
-tf.app.flags.DEFINE_integer("batch_size", 16, "Batch size to use during training.")  # batch_size
+tf.app.flags.DEFINE_integer("batch_size", 100, "Batch size to use during training.")  # batch_size
 tf.app.flags.DEFINE_string("data_dir", "./data", "Data directory")  # 数据的目录
 tf.app.flags.DEFINE_string("train_dir", "./train", "Training directory.")  # 保存模型的目录
-tf.app.flags.DEFINE_integer("per_checkpoint", 60, "How many steps to do per checkpoint.")  # 每多少步保存一下模型
+tf.app.flags.DEFINE_integer("per_checkpoint", 5, "How many steps to do per checkpoint.")  # 每多少步保存一下模型
 tf.app.flags.DEFINE_integer("inference_version", 0, "The version for inferencing.")  # 推导的版本
 tf.app.flags.DEFINE_boolean("log_parameters", True, "Set to True to show the parameters")  # 是否显示参数
 tf.app.flags.DEFINE_string("inference_path", "test", "Set filename of inference")  # 推导的文件名
@@ -65,17 +65,13 @@ def prepare_data(path, is_train=True):
 
     # 载入验证集
     with open('%s/validset.txt' % path) as f:
-        for idx, line in enumerate(f):
+        for line in f:
             data_dev.append(json.loads(line))
-            if idx == 500:  # 用来删减数据集
-                break
 
     # 载入测试集
     with open('%s/testset.txt' % path) as f:
-        for idx, line in enumerate(f):
+        for line in f:
             data_test.append(json.loads(line))
-            if idx == 500:  # 用来删减数据集
-                break
 
     return raw_vocab, data_train, data_dev, data_test
 
@@ -463,20 +459,25 @@ with tf.Session(config=config) as sess:
                 show = lambda a: '[%s]' % (' '.join(['%.2f' % x for x in a]))
                 # 输出模型总的更新参数的次数，学习速率，更新一次参数所花的时间，记录一次模型时的 ppx
                 print("global step %d learning rate %.4f step-time %.2f loss %f perplexity %s"
-                        % (model.global_step.eval(), model.lr, 
-                            (time.time() - start_time) / ((ed - st) / FLAGS.batch_size), loss_step, show(np.exp(loss_step))))
+                        % (model.global_step.eval(), model.lr, (time.time() - start_time) / ((ed - st) / FLAGS.batch_size),
+                           loss_step, show(np.exp(loss_step))))
                 # 保存模型
-                model.saver.save(sess, '%s/checkpoint' % FLAGS.train_dir, 
-                        global_step=model.global_step)
+                model.saver.save(sess, '%s/checkpoint' % FLAGS.train_dir,
+                                 global_step=model.global_step)
+
+                # 自己添加summary
                 summary = tf.Summary()
                 summary.value.add(tag='decoder_loss/train', simple_value=loss_step)
                 summary.value.add(tag='perplexity/train', simple_value=np.exp(loss_step))
                 summary_writer.add_summary(summary, model.global_step.eval())
+                # 运行并添加模型里面的summary
                 summary_model = generate_summary(model, sess, data_train)
                 summary_writer.add_summary(summary_model, model.global_step.eval())
-
+                # 计算验证集上的结果
                 evaluate(model, sess, data_dev, summary_writer)
-                previous_losses = previous_losses[1:]+[np.sum(loss_step)]
+
+                # 保留三次记录模型时的损失
+                previous_losses = previous_losses[1:] + [np.sum(loss_step)]
                 loss_step, time_step = np.zeros((1, )), .0
                 st, ed = ed, min(train_len, ed + FLAGS.batch_size * FLAGS.per_checkpoint)
             model.saver_epoch.save(sess, '%s/epoch/checkpoint' % FLAGS.train_dir, global_step=model.global_step)
