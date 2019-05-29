@@ -233,7 +233,7 @@ def gen_batched_data(data):
         match_triples.append(match_index + [[-1]*triple_num]*(decoder_len-len(match_index)))  # batch_size * decoder_len * triple_num
 
         # 如果不在训练，构建entities
-        # entities 为 post 中每个关键词用到的关系三元组中所有实体
+        # entities 为post中每个关键词用到的关系三元组中所有实体
         if not FLAGS.is_train:
             entity = [['_NONE']*triple_len]
             for ent in item['all_entities']:
@@ -242,14 +242,14 @@ def gen_batched_data(data):
 
 
     batched_data = {'posts': np.array(posts),
-            'responses': np.array(responses),
-            'posts_length': posts_length, 
-            'responses_length': responses_length,
-            'triples': np.array(all_triples),
-            'entities': np.array(entities),
-            'posts_triple': np.array(post_triples),
-            'responses_triple': np.array(response_triples),
-            'match_triples': np.array(match_triples)}
+                    'responses': np.array(responses),
+                    'posts_length': posts_length,
+                    'responses_length': responses_length,
+                    'triples': np.array(all_triples),
+                    'entities': np.array(entities),
+                    'posts_triple': np.array(post_triples),
+                    'responses_triple': np.array(response_triples),
+                    'match_triples': np.array(match_triples)}
 
     return batched_data
 
@@ -326,9 +326,10 @@ def test(sess, saver, data_dev, setnum=5000):
                 saver.restore(sess, model_path)
             except:
                 continue
+############迭代验证集                                                                                               ###
             st, ed = 0, FLAGS.batch_size
             results = []
-            loss = []
+            loss = []  # [len(data_dev)] 每个样本每个单词的ppx
             while st < len(data_dev):
                 selected_data = data_dev[st:ed]
                 batched_data = gen_batched_data(selected_data)
@@ -343,6 +344,9 @@ def test(sess, saver, data_dev, setnum=5000):
                      'enc_triples:0': batched_data['posts_triple'],
                      'dec_triples:0': batched_data['responses_triple']})
                 loss += [x for x in ppx_loss]
+                ###
+                responses = [[str(word, encoding="utf-8") for word in response] for response in responses.tolist()]
+                ###
                 for response in responses:
                     result = []
                     for token in response:
@@ -352,26 +356,36 @@ def test(sess, saver, data_dev, setnum=5000):
                             break
                     results.append(result)
                 st, ed = ed, ed+FLAGS.batch_size
-            match_entity_sum = [.0] * 4  #
-            cnt = 0  # 
-            for post, response, result, match_triples, triples, entities in zip([data['post'] for data in data_dev], [data['response'] for data in data_dev], results, [data['match_triples'] for data in data_dev], [data['all_triples'] for data in data_dev], [data['all_entities'] for data in data_dev]):
-                #
-                setidx = int(cnt / setnum)
+############                                                                                                         ###
+            match_entity_sum = [.0] * 4  # [0.0, 0.0, 0.0, 0.0]
+            cnt = 0  #
+            for post, response, result, match_triples, triples, entities in \
+                    zip([data['post'] for data in data_dev],
+                        [data['response'] for data in data_dev],
+                        results,
+                        [data['match_triples'] for data in data_dev],  # 回复中用到的三元组的id
+                        [data['all_triples'] for data in data_dev],  # 与post中关键词相关的所有三元组的id
+                        [data['all_entities'] for data in data_dev]):  # 与post中关键词相关的所有三元组中出现的实体id
+                setidx = int(cnt / setnum)  #
                 result_matched_entities = []
-                triples = [csk_triples[tri] for triple in triples for tri in triple]
-                match_triples = [csk_triples[triple] for triple in match_triples]
-                entities = [csk_entities[x] for entity in entities for x in entity]
-                matches = [x for triple in match_triples for x in [triple.split(', ')[0], triple.split(', ')[2]] if x in response]
-                
+                # triples = [csk_triples[tri] for triple in triples for tri in triple]  # 与post中关键词相关的所有三元组
+                # match_triples = [csk_triples[triple] for triple in match_triples]  # 回复中用到的三元组
+                entities = [csk_entities[x] for entity in entities for x in entity]  # 与post中关键词相关的所有三元组中出现的实体
+                # 回复中用到的实体词
+                # matches = [x for triple in match_triples for x in [triple.split(', ')[0],
+                #                                                    triple.split(', ')[2]] if x in response]
+                # 如果结果中出现的单词不在停用词当中并且出现在相关的三元组实体词中
                 for word in result:
                     if word not in stopwords and word in entities:
                         result_matched_entities.append(word)
                 #
-                _result = [str(res) for res in result]
-                outfile.write('post: %s\nresponse: %s\nresult: %s\nmatch_entity: %s\n\n' % (' '.join(post), ' '.join(response), ' '.join(_result), ' '.join(result_matched_entities)))
+                outfile.write('post: %s\nresponse: %s\nresult: %s\nmatch_entity: %s\n\n'
+                              % (' '.join(post), ' '.join(response), ' '.join(result), ' '.join(result_matched_entities)))
                 match_entity_sum[setidx] += len(set(result_matched_entities))
                 cnt += 1
+            # 将测试集划成4个部分，记录了每个部分的匹配率
             match_entity_sum = [m / setnum for m in match_entity_sum] + [sum(match_entity_sum) / len(data_dev)]
+            # 将测试集划成4个部分，记录了每个部分的损失
             losses = [np.sum(loss[x:x+setnum]) / float(setnum) for x in range(0, setnum*4, setnum)] + [np.sum(loss) / float(setnum*4)]
             losses = [np.exp(x) for x in losses]
             def show(x):

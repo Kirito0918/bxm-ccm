@@ -159,7 +159,7 @@ def attention_decoder_fn_inference(output_fn,
                     selector = selector_fn(cell_output)  # 选择实体词的概率选择器
                     logit = output_fn(cell_output)  # [batch_size, num_decoder_symbols] 未softmax的预测
                     word_prob = nn_ops.softmax(logit) * (1 - selector)  # [batch_size, num_decoder_symbols] 选择生成词概率
-                    entity_prob = alignment * selector  # 选择实体词的概率
+                    entity_prob = alignment * selector  # 选择实体词的概率 [batch_size, triple_num*triple_len]或者[batch_size, decoder_len]
 
                     # [batch_size, 1] 该步是否选择生成词
                     # 1、tf.reduce_max(word_prob, 1): [batch_size] 生成词最大的概率

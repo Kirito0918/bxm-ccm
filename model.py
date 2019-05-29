@@ -320,40 +320,40 @@ class Model(object):
                                                EOS_ID,
                                                max_length,
                                                num_symbols,
-                                               imem=(entities_word_embedding,
-                                                     tf.reshape(triples_embedding, [encoder_batch_size, -1, 3*num_trans_units])),
+                                               imem=(entities_word_embedding,  # imem: ([batch_size,triple_num*triple_len,num_embed_units],
+                                                     tf.reshape(triples_embedding, [encoder_batch_size, -1, 3*num_trans_units])),  # [encoder_batch_size, triple_num*triple_len, 3*num_trans_units]) 实体词嵌入和三元组嵌入的元组
                                                selector_fn=selector_fn)
-            # imem: ([batch_size,triple_num*triple_len,num_embed_units],
-            # [encoder_batch_size, triple_num*triple_len, 3*num_trans_units]) 实体词嵌入和三元组嵌入的元组
-                
-            self.decoder_distribution, _, output_ids_ta = dynamic_rnn_decoder(decoder_cell,
-                    decoder_fn_inference, scope="decoder_rnn")
+            # decoder_distribution: [batch_size, decoder_len, num_symbols]
+            # output_ids_ta: tensorarray: decoder_len [batch_size]
+            self.decoder_distribution, _, output_ids_ta = dynamic_rnn_decoder(decoder_cell, decoder_fn_inference,
+                                                                              scope="decoder_rnn")
 
             output_len = tf.shape(self.decoder_distribution)[1]  # decoder_len
             output_ids = tf.transpose(output_ids_ta.gather(tf.range(output_len)))  # [batch_size, decoder_len]
 
-            # 对 output 的值域行裁剪
+            # 对output的值域行裁剪，因为存在负值表示用了实体词
             word_ids = tf.cast(tf.clip_by_value(output_ids, 0, num_symbols), tf.int64)  # [batch_size, decoder_len]
 
-            # 计算的是采用的实体词在 entities 的位置
+            # 计算的是实体词在entities中的实际位置 [batch_size, decoder_len]
             # 1、tf.shape(entities_word_embedding)[1] = triple_num*triple_len
             # 2、tf.range(encoder_batch_size): [batch_size]
-            # 3、tf.reshape(tf.range(encoder_batch_size) * tf.shape(entities_word_embedding)[1], [-1, 1]): [batch_size, 1] 实体词在 entities 中的偏移量
-            # 4、tf.clip_by_value(-output_ids, 0, num_symbols): [batch_size, decoder_len] 实体词的相对位置
-            # 5、entity_ids: [batch_size * decoder_len] 加上偏移量之后在 entities 中的实际位置
-            entity_ids = tf.reshape(tf.clip_by_value(-output_ids, 0, num_symbols) + tf.reshape(tf.range(encoder_batch_size) * tf.shape(entities_word_embedding)[1], [-1, 1]), [-1])
+            # 3、tf.reshape(tf.range(encoder_batch_size) * tf.shape(entities_word_embedding)[1], [-1, 1]): [batch_size, 1] 实体词在entities中的基地址
+            # 4、tf.clip_by_value(-output_ids, 0, num_symbols): [batch_size, decoder_len] 实体词在entities中的偏移量
+            # 5、entity_ids: [batch_size, decoder_len] 实体词在entities中的实际位置
+            entity_ids = tf.reshape(tf.clip_by_value(-output_ids, 0, num_symbols) +
+                                    tf.reshape(tf.range(encoder_batch_size) * tf.shape(entities_word_embedding)[1], [-1, 1]), [-1])
 
-            # 计算的是所用的实体词
+            # 计算的是所用的实体词 [batch_size, decoder_len]
             # 1、entities: [batch_size, triple_num, triple_len]
-            # 2、tf.reshape(self.entities, [-1]): [batch_size * triple_num * triple_len]
+            # 2、tf.reshape(self.entities, [-1]): [batch_size*triple_num*triple_len]
             # 3、tf.gather: [batch_size*decoder_len]
-            # 4、entities: [batch_size, output_len]
+            # 4、entities: [batch_size, decoder_len]
             entities = tf.reshape(tf.gather(tf.reshape(self.entities, [-1]), entity_ids), [-1, output_len])
 
-            words = self.index2symbol.lookup(word_ids)  # 将 id 转化为实际的词
-            # output_ids > 0 为 bool 张量，True 的位置用 words 中该位置的词替换
+            words = self.index2symbol.lookup(word_ids)  # 将id转化为实际的词
+            # output_ids>0为bool张量，True的位置用words中该位置的词替换
             self.generation = tf.where(output_ids > 0, words, entities)
-            self.generation = tf.identity(self.generation, name='generation')
+            self.generation = tf.identity(self.generation, name='generation')  # [batch_size, decoder_len]
 ########                                                                                                             ###
 
         # 初始化训练过程
