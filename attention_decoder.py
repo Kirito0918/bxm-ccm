@@ -244,142 +244,131 @@ def attention_decoder_fn_inference(output_fn,
 
     return decoder_fn
 
-def attention_decoder_fn_beam_inference(output_fn,  # 输出层给出的输出函数
-                                       encoder_state,  # 编码器状态
-                                       attention_keys,  # 注意力的key
-                                       attention_values,  # 注意力的value
-                                       attention_score_fn,  # 计算注意力分数的函数
-                                       attention_construct_fn,  # 构造上下文的函数
-                                       embeddings,  # 词嵌入
-                                       start_of_sequence_id,  # 序列的起始id
-                                       end_of_sequence_id,  # 序列的结束id
-                                       maximum_length,  # 最大长度
-                                       num_decoder_symbols,
-                                       beam_size,
-                                       remove_unk=False,
-                                       d_rate=0.0,
-                                       dtype=dtypes.int32,
-                                       name=None):
-    """推导时用于 dynamic_rnn_decoder 的注意力 decoder 函数
-
-    attention_decoder_fn_inference 是一个用于 seq2seq 模型简单的推导函数。
-    它能够在 dynamic_rnn_decoder 在推导模式下被使用。
-
-    Returns:
-        拥有 dynamic_rnn_decoder 所需接口的解码器函数
-        用于推导。
-    """
+def attention_decoder_fn_beam_inference(output_fn,
+                                        encoder_state,
+                                        attention_keys,
+                                        attention_values,
+                                        attention_score_fn,
+                                        attention_construct_fn,
+                                        embeddings,
+                                        start_of_sequence_id,
+                                        end_of_sequence_id,
+                                        maximum_length,
+                                        num_decoder_symbols,
+                                        beam_size,
+                                        remove_unk=False,  # ?
+                                        d_rate=0.0,  # ?
+                                        dtype=dtypes.int32,
+                                        name=None):
     with ops.name_scope(name, "attention_decoder_fn_inference", [
             output_fn, encoder_state, attention_keys, attention_values,
             attention_score_fn, attention_construct_fn, embeddings,
             start_of_sequence_id, end_of_sequence_id, maximum_length,
             num_decoder_symbols, dtype
     ]):
-        # encoder：应该为[layer_num, batch_size, encoder_size]
-        # with_rank()给定rank返回一个shape张量
+
         state_size = int(encoder_state[0].get_shape().with_rank(2)[1])  # encoder_size
         state = []
-        for s in encoder_state:  # s:[batch_size, encoder_size]
-            # reshape: s->[batch_size, 1, encoder_size]
-            # concat: [batch_size, 5, encoder_size]
-            # reshape: [batch_size*5, encoder_size]
-            # state: [layer_num, batch_size, encoder_size]
-            # 实现了将初始的状态复制5次的效果
+        for s in encoder_state:  # s:[batch_size, state_size]
+            # 将初始的状态复制beam_size次 [batch_size*beam_size, state_size]*layer_nums
+            # reshape: [batch_size, 1, state_size]
+            # concat: [batch_size, beam_size, state_size]
+            # reshape: [batch_size*beam_size, state_size]
             state.append(array_ops.reshape(array_ops.concat([array_ops.reshape(s, [-1, 1, state_size])]*beam_size, 1), [-1, state_size]))
-        encoder_state = tuple(state)
-        # attention_values：[batch_size, encoder_len, num_units]
+        encoder_state = tuple(state)  # tuple(tensor(batch_size*beam_size, state_size)*layer_nums)
+        """attention_values存在三种情况
+        attention_values = attention_states: 不存在静态图和三元组
+        attention_states: [batch_size, encoder_len, num_units]
+        attention_values = (attention_states, attention_states2): 存在静态图
+        attention_states2: [batch_size, triple_num, num_units]
+        attention_values = (attention_states, attention_states2, attention_states3):存在静态图和三元组
+        attention_states3: [encoder_batch_size, triple_num, triple_len, num_units]
+        """
+        # 这里是既没有静态图也没有三元组 attention_values: [batch_size, encoder_len, num_units]
         origin_batch = array_ops.shape(attention_values)[0]  # batch_size
         attn_length = array_ops.shape(attention_values)[1]  # encoder_len
-        attention_values = array_ops.reshape(array_ops.concat([array_ops.reshape(attention_values, [-1, 1, attn_length, state_size])]*beam_size, 1), [-1, attn_length, state_size])
-        attn_size = array_ops.shape(attention_keys)[2]
-        attention_keys = array_ops.reshape(array_ops.concat([array_ops.reshape(attention_keys, [-1, 1, attn_length, attn_size])]*beam_size, 1), [-1, attn_length, attn_size])
-        start_of_sequence_id = ops.convert_to_tensor(start_of_sequence_id, dtype)
-        end_of_sequence_id = ops.convert_to_tensor(end_of_sequence_id, dtype)
-        maximum_length = ops.convert_to_tensor(maximum_length, dtype)
-        num_decoder_symbols = ops.convert_to_tensor(num_decoder_symbols, dtype)
-        encoder_info = nest.flatten(encoder_state)[0]
-        batch_size = encoder_info.get_shape()[0].value
+
+        # 获得新的注意力values [batch_size*beam_size, encoder_len, state_size]
+        # 1、reshape: [batch_size, 1, encoder_len, state_size]*beam_size
+        # 2、concat: [batch_size, beam_size, encoder_len, state_size]
+        # 3、reshape: [batch_size*beam_size, encoder_len, state_size]
+        attention_values = array_ops.reshape(array_ops.concat([array_ops.reshape(attention_values, [-1, 1, attn_length, state_size])]*beam_size, 1),
+                                             [-1, attn_length, state_size])
+        attn_size = array_ops.shape(attention_keys)[2]  # state_size
+        # 获得新的注意力keys [batch_size*beam_size, encoder_len, state_size]
+        attention_keys = array_ops.reshape(array_ops.concat([array_ops.reshape(attention_keys, [-1, 1, attn_length, attn_size])]*beam_size, 1),
+                                           [-1, attn_length, attn_size])
+
+        start_of_sequence_id = ops.convert_to_tensor(start_of_sequence_id, dtype)  # startid
+        end_of_sequence_id = ops.convert_to_tensor(end_of_sequence_id, dtype)  # endid
+        maximum_length = ops.convert_to_tensor(maximum_length, dtype)  #
+        num_decoder_symbols = ops.convert_to_tensor(num_decoder_symbols, dtype)  # num_symbols
+        # encoder_state: tuple(tensor(batch_size*beam_size, state_size)*layer_nums)
+        encoder_info = nest.flatten(encoder_state)[0]  # tensor(batch_size*beam_size, state_size)
+        batch_size = encoder_info.get_shape()[0].value  # batch_size*beam_size
         if output_fn is None:
             output_fn = lambda x: x
         if batch_size is None:
             batch_size = array_ops.shape(encoder_info)[0]
-        #beam_size = ops.convert_to_tensor(beam_size, dtype)
+        # beam_size = ops.convert_to_tensor(beam_size, dtype)
 
+    # encoder_state: tuple(tensor(batch_size*beam_size, state_size)*layer_nums)
     def decoder_fn(time, cell_state, cell_input, cell_output, context_state):
-        """在 dynamic_rnn_decoder 中用于推导的解码器函数
-
-        这个解码器函数和 attention_decoder_fn_train 中的 decoder_fn 最大的区别是，next_cell_input
-        是如何计算的。在解码器函数中，我们通过在解码器输出的特征维度上使用一个 argmax 来计算下一个输入。
-        这是一种 greedy-search 的方式。(Bahdanau et al., 2014) & (Sutskever et al., 2014) 使用 beam-search。
-
-        Args:
-            time: 反映当前时间步的正整型常量                     positive integer constant reflecting the current timestep.
-            cell_state: RNNCell 的状态                          state of RNNCell.
-            cell_input: dynamic_rnn_decoder 提供的输入          input provided by `dynamic_rnn_decoder`.
-            cell_output: RNNCell的输出                          output of RNNCell.
-            context_state: dynamic_rnn_decoder 提供的上下文状态  context state provided by `dynamic_rnn_decoder`.
-        Returns:
-            一个元组 (done, next state, next input, emit output, next context state)
-            其中:
-            done: 一个指示哪个句子已经达到 end_of_sequence_id 的布尔向量。
-            被 dynamic_rnn_decoder 用来提早停止。当 time>maximum_length 时，
-            一个所有元素都为 true 的布尔向量被返回。
-            next state: `cell_state`, 这个解码器函数不修改给定的状态。
-            next input: cell_output 的 argmax 的嵌入被用作 next_input
-            emit output: 如果 output_fn is None，所提供的 cell_output 被返回。
-                否则被用来在计算 next_input 和返回 cell_output 之前更新 cell_output。
-            next context state: `context_state`, 这个解码器函数不修改给定的上下文状态。
-                当使用，例如，beam search 时，上下文状态能够被修改。
-        Raises:
-            ValueError: if cell_input is not None.
-        """
         with ops.name_scope(
                 name, "attention_decoder_fn_inference",
                 [time, cell_state, cell_input, cell_output, context_state]):
+            # beam_search是用在推导时的，这时候没有输入
             if cell_input is not None:
-                raise ValueError("Expected cell_input to be None, but saw: %s" %
-                                                 cell_input)
+                raise ValueError("Expected cell_input to be None, but saw: %s" % cell_input)
+            # time=0, ouput is None
             if cell_output is None:
-                # invariant that this is time == 0
-                next_input_id = array_ops.ones(
-                        [batch_size,], dtype=dtype) * (start_of_sequence_id)
-                done = array_ops.zeros([batch_size,], dtype=dtypes.bool)
+                next_input_id = array_ops.ones([batch_size, ], dtype=dtype) * (start_of_sequence_id)
+                done = array_ops.zeros([batch_size, ], dtype=dtypes.bool)  # False
                 cell_state = encoder_state
-                cell_output = array_ops.zeros(
-                        [num_decoder_symbols], dtype=dtypes.float32)
-                cell_input = array_ops.gather(embeddings, next_input_id)
+                cell_output = array_ops.zeros([num_decoder_symbols], dtype=dtypes.float32)
+                cell_input = array_ops.gather(embeddings, next_input_id)  # 当前时间的输入嵌入 [batch_size, embed_units]
 
-                # init attention
+                # 初始化注意力
                 attention = _init_attention(encoder_state)
-                # init context state
-                log_beam_probs = tensor_array_ops.TensorArray(dtype=dtypes.float32, tensor_array_name="log_beam_probs", size=maximum_length, dynamic_size=True, infer_shape=False)
-                beam_parents = tensor_array_ops.TensorArray(dtype=dtypes.int32, tensor_array_name="beam_parents", size=maximum_length, dynamic_size=True, infer_shape=False)
-                beam_symbols = tensor_array_ops.TensorArray(dtype=dtypes.int32, tensor_array_name="beam_symbols", size=maximum_length, dynamic_size=True, infer_shape=False)
-                result_probs = tensor_array_ops.TensorArray(dtype=dtypes.float32, tensor_array_name="result_probs", size=maximum_length, dynamic_size=True, infer_shape=False)
-                result_parents = tensor_array_ops.TensorArray(dtype=dtypes.int32, tensor_array_name="result_parents", size=maximum_length, dynamic_size=True, infer_shape=False)
-                result_symbols = tensor_array_ops.TensorArray(dtype=dtypes.int32, tensor_array_name="result_symbols", size=maximum_length, dynamic_size=True, infer_shape=False)
+                # 初始化上下文状态
+                log_beam_probs = tensor_array_ops.TensorArray(dtype=dtypes.float32, tensor_array_name="log_beam_probs",
+                                                              size=maximum_length, dynamic_size=True, infer_shape=False)
+                beam_parents = tensor_array_ops.TensorArray(dtype=dtypes.int32, tensor_array_name="beam_parents",
+                                                            size=maximum_length, dynamic_size=True, infer_shape=False)
+                beam_symbols = tensor_array_ops.TensorArray(dtype=dtypes.int32, tensor_array_name="beam_symbols",
+                                                            size=maximum_length, dynamic_size=True, infer_shape=False)
+                result_probs = tensor_array_ops.TensorArray(dtype=dtypes.float32, tensor_array_name="result_probs",
+                                                            size=maximum_length, dynamic_size=True, infer_shape=False)
+                result_parents = tensor_array_ops.TensorArray(dtype=dtypes.int32, tensor_array_name="result_parents",
+                                                              size=maximum_length, dynamic_size=True, infer_shape=False)
+                result_symbols = tensor_array_ops.TensorArray(dtype=dtypes.int32, tensor_array_name="result_symbols",
+                                                              size=maximum_length, dynamic_size=True, infer_shape=False)
                 context_state = (log_beam_probs, beam_parents, beam_symbols, result_probs, result_parents, result_symbols)
             else:
-                # construct attention
-                attention = attention_construct_fn(cell_output, attention_keys,
-                        attention_values)
+                # attention: [batch_size*beam_size, num_units]
+                attention = attention_construct_fn(cell_output, attention_keys, attention_values)
                 cell_output = attention
 
-                # beam search decoder
+                # 获取存储的上下文tensorarray
                 (log_beam_probs, beam_parents, beam_symbols, result_probs, result_parents, result_symbols) = context_state
                 
-                cell_output = output_fn(cell_output)    # logits
-                cell_output = nn_ops.softmax(cell_output)
-                
+                cell_output = output_fn(cell_output)
+                cell_output = nn_ops.softmax(cell_output)  # [batch_size*beam_size, num_symbols] 预测
 
-                cell_output = array_ops.split(cell_output, [2, num_decoder_symbols-2], 1)[1]
+                # [batch_size*beam_size, num_symbols-2]
+                cell_output = array_ops.split(cell_output, [2, num_decoder_symbols-2], 1)[1]  # 前两个是'_PAD', '_UNK'
 
+                #
+                # 1、range: [1, 2, 3, ..., batch_size] [batch_size]
+                # 2、range*beam_size: [beam_size, 2*beam_size, 3*beam_size,..., batch_size*beam_size] [batch_size]
+                # 3、gather: [batch_size, num_symbols-2]
                 tmp_output = array_ops.gather(cell_output, math_ops.range(origin_batch)*beam_size)
 
                 probs = control_flow_ops.cond(
                         math_ops.equal(time, ops.convert_to_tensor(1, dtype)),
                         lambda: math_ops.log(tmp_output+ops.convert_to_tensor(1e-20, dtypes.float32)),
-                        lambda: math_ops.log(cell_output+ops.convert_to_tensor(1e-20, dtypes.float32)) + array_ops.reshape(log_beam_probs.read(time-2), [-1, 1]))
+                        lambda: math_ops.log(cell_output+ops.convert_to_tensor(1e-20, dtypes.float32)) +
+                                array_ops.reshape(log_beam_probs.read(time-2), [-1, 1]))
 
                 probs = array_ops.reshape(probs, [origin_batch, -1])
                 best_probs, indices = nn_ops.top_k(probs, beam_size * 2)
