@@ -1,4 +1,5 @@
 import json
+import numpy as np
 
 # 测试词向量
 def test_vector():
@@ -16,7 +17,7 @@ def test_vector():
 # 截取部分训练集
 def cut_trainset():
     with open("../data/trainset.txt", "r") as fr:
-        with open("./testdata/train.txt", "w") as fw:
+        with open("./train.txt", "w") as fw:
             for ids, line in enumerate(fr, start=1):
                 line = json.loads(line)
                 fw.write(json.dumps(line)+"\n")
@@ -25,7 +26,7 @@ def cut_trainset():
 # 截取部分测试集
 def cut_testset():
     with open("../data/testset.txt", "r") as fr:
-        with open("./testdata/test.txt", "w") as fw:
+        with open("./test.txt", "w") as fw:
             for ids, line in enumerate(fr, start=1):
                 line = json.loads(line)
                 fw.write(json.dumps(line)+"\n")
@@ -34,7 +35,7 @@ def cut_testset():
 
 # 测试测试集保存是否正确
 def test_testset():
-    with open("./testdata/test.txt", "r") as fr:
+    with open("./test.txt", "r") as fr:
         for line in fr:
             line = json.loads(line)
             print(line)
@@ -45,24 +46,21 @@ def load_glove():
     with open("../data/glove.840B.300d.txt", "r", encoding="utf8") as fr:
         for index, line in enumerate(fr):
             if index % 100000 == 0:
-                print("load vocabulary %d" % index)
-            line = line.strip().split()
-            word = line[0]
-            embed = line[1:]
-            if len(embed) != 300:
-                continue
+                print("load embed %d" % index)
+            line = line.strip()
+            word = line[:line.find(" ")]
+            embed = line[line.find(" ")+1:]
             embeds[word] = embed
-    print("载入词嵌入个数：", len(embeds))
-    print("载入词嵌入：", embeds)
+    print("load embed finish!")
     return embeds
 
-VOCABULARY_SIZE = 5000
+VOCABULARY_SIZE = 18000
 UNK_TOKEN = "<unk>"
 def get_vocabulary():
     posts = []
     responses = []
     vocabulary_dict = {}
-    with open("./testdata/train.txt", "r") as fr:
+    with open("./train.txt", "r") as fr:
         for line in fr:
             sample = json.loads(line)
             post = sample["post"]
@@ -90,8 +88,43 @@ def get_vocabulary():
     return list(vocabulary_dict.keys())
 
 def create_vocabulary():
-    words, embeds = load_glove()
-    vocabulary = get_vocabulary()
+    vocabulary = get_vocabulary()  # list
+    embeds = load_glove()  # embed dict
+    embed_dim_error = 0
+    not_in_embed = 0
+    with open("vector", "w") as fw:
+        for word in vocabulary:
+            if word in embeds:
+                vector = embeds[word].split()
+                if len(vector) != 300:
+                    embed_dim_error += 1
+                    not_in_embed += 1
+                    vector = ['0'] * 300
+            else:
+                vector = ['0'] * 300
+                not_in_embed += 1
+            fw.write(word + " " + " ".join(vector) + "\n")
+    print("create vocabulary finish!")
+    print("glove dim error %d" % embed_dim_error)
+    print("vocabulary not in glove %d" % not_in_embed)
+    print("vocabulary not in glove rate %f" % (1.0*not_in_embed/VOCABULARY_SIZE))
+
+def load_vocabulary():
+    vocabulary = {}
+    with open("./vector", "r") as fr:
+        for line in fr:
+            line = line.strip()
+            word = line[: line.find(" ")]
+            vector = line[line.find(" ")+1:].split()
+            if len(vector) != 300:
+                raise Exception("dim of vector not equal 300!")
+            vector = np.array(map(lambda x: float(x), vector))
+            vocabulary[word] = vector
+    if len(vocabulary) != VOCABULARY_SIZE:
+        raise Exception("number of embed not equal VOCABULARY_SIZE!")
+    print(vocabulary)
+
+
 
 
 if __name__ == '__main__':
@@ -99,5 +132,6 @@ if __name__ == '__main__':
     # cut_testset()
     # test_testset()
     # get_vocabulary()
-    load_glove()
+    # create_vocabulary()
+    load_vocabulary()
     pass
