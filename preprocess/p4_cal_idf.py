@@ -1,7 +1,7 @@
 import json
-from config import VOCABULARY_SIZE
 from tqdm import tqdm
 import math
+from config import UNK_TOKEN
 
 def load_vocabulary():
     vocab = {}
@@ -18,30 +18,54 @@ def load_vocabulary():
             if ids % 10000 == 0:
                 print("load vocabulary %d" % ids)
     print("load vocabulary finish!")
-    if len(vocab) != VOCABULARY_SIZE:
-        raise Exception("number of embed not equal VOCABULARY_SIZE!")
     return vocab
+
+# def cal_idf():
+#     trainset = []
+#     vocab = load_vocabulary()
+#     idfs = {}
+#     print("load data...")
+#     with open("./data/train.txt", "r") as fr:
+#         for ids, line in enumerate(fr):
+#             trainset.append(json.loads(line))
+#             if ids % 100000 == 0:
+#                 print("load data %d" % ids)
+#     print("load data finish!")
+#     num_trainset = len(trainset)
+#     print("calculate idf...")
+#     for word in tqdm(vocab.keys()):
+#         count = 1
+#         for train_data in trainset:
+#             if word in train_data['post'] or word in train_data['response']:
+#                 count += 1
+#         idf = math.log10(1.0*num_trainset/count)
+#         idfs[word] = idf
+#     print("calculate idf finish!")
+#     with open("./data/idf.txt", "w") as fw:
+#         fw.write(json.dumps(idfs))
 
 def cal_idf():
     trainset = []
     vocab = load_vocabulary()
-    idfs = {}
+    idfs = dict(zip(vocab.keys(), [0]*len(vocab.keys())))
     print("load data...")
     with open("./data/train.txt", "r") as fr:
         for ids, line in enumerate(fr):
-            trainset.append(json.loads(line))
+            line = json.loads(line)
+            trainset.append(set(line['post']+line['response']))
             if ids % 100000 == 0:
                 print("load data %d" % ids)
     print("load data finish!")
     num_trainset = len(trainset)
     print("calculate idf...")
-    for word in tqdm(vocab.keys()):
-        count = 1
-        for train_data in trainset:
-            if word in train_data['post'] or word in train_data['response']:
-                count += 1
-        idf = math.log10(1.0*num_trainset/count)
-        idfs[word] = idf
+    for sample in tqdm(trainset):
+        for word in sample:
+            if word in idfs:
+                idfs[word] += 1
+            else:
+                idfs[UNK_TOKEN] += 1
+    for word, idf in tqdm(idfs.items()):
+        idfs[word] = math.log10(1.0*num_trainset/(idf+1))
     print("calculate idf finish!")
     with open("./data/idf.txt", "w") as fw:
         fw.write(json.dumps(idfs))

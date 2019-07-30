@@ -19,15 +19,13 @@ def get_vocabulary():
             if ids % 100000 == 0:
                 print("load data %d" % ids)
     print("load data finish!")
-    print("calculate the frequency of word from post")
     for post in tqdm(posts):
         for word in post:
             if word in vocabulary_dict:
                 vocabulary_dict[word] += 1
             else:
                 vocabulary_dict[word] = 1
-    print("calculate the frequency of word from response")
-    for response in responses:
+    for response in tqdm(responses):
         for word in response:
             if word in vocabulary_dict:
                 vocabulary_dict[word] += 1
@@ -35,11 +33,11 @@ def get_vocabulary():
                 vocabulary_dict[word] = 1
     print("calculate the frequency of word finish!")
     vocabulary_dict = sorted(vocabulary_dict.items(), key=lambda x: x[1], reverse=True)
-    print("训练集词频：", vocabulary_dict)
+    # print("训练集词频：", vocabulary_dict)
     print("出现的单词个数：", len(vocabulary_dict))
     vocabulary_dict = dict([(UNK_TOKEN, 0)] + vocabulary_dict[: VOCABULARY_SIZE-1])
     print("截取词汇表大小：", len(vocabulary_dict))
-    print("词汇表：", vocabulary_dict)
+    # print("词汇表：", vocabulary_dict)
     return list(vocabulary_dict.keys())
 
 if __name__ == '__main__':

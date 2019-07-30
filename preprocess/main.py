@@ -3,8 +3,8 @@ from p1_processs_data import cut_trainset, cut_testset
 from p2_create_vocabulary import get_vocabulary
 from p3_select_vector_from_embed import create_vocabulary
 from p4_cal_idf import cal_idf
-from p5_1_cal_bow_sentense_vector import cal_bow_embed
-from p5_2_cal_idf_sentense_vector import cal_idf_embed
+from p5_1_cal_bow_sentence_vector import cal_bow_embed
+from p5_2_cal_idf_sentence_vector import cal_idf_embed
 from p6_retrieval import retrieval_with_bow, retrieval_with_idf
 from p7_evaluate import evaluate
 

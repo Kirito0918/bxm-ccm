@@ -10,25 +10,26 @@ def retrieval_with_bow():
     testset = []
     trainset = []
     cosine_maxs = []
-    print("read test sentense embed...")
+    print("read test sentence embed...")
     with open("./data/test_bow_pro.txt", "r") as fr:
         for ids, line in enumerate(fr):
             testset.append(json.loads(line))
-            if ids % 10000:
-                print("read test sentense embed %d" % ids)
-    print("read test sentense finish!")
-    print("read train sentense embed...")
+            if ids % 10000 == 0:
+                print("read test sentence embed %d" % ids)
+    print("read test sentence finish!")
+    print("read train sentence embed...")
     with open("./data/train_bow_pro.txt", "r") as fr:
         for ids, line in enumerate(fr):
             trainset.append(json.loads(line))
-            print("read train sentense embed %d" % ids)
-    print("read train sentense finish!")
+            if ids % 100000 == 0:
+                print("read train sentence embed %d" % ids)
+    print("read train sentence finish!")
     with open(RESULT_PATH, "w") as fw:
         for test_data in tqdm(testset):
             cosines = []
-            vec1 = np.array(test_data['sentense_embed'])
+            vec1 = np.array(test_data['sentence_embed'])
             for train_data in trainset:
-                vec2 = np.array(train_data['sentense_embed'])
+                vec2 = np.array(train_data['sentence_embed'])
                 cosine = cal_cosine(vec1, vec2)
                 cosines.append(cosine)
             cosine_max = max(cosines)
@@ -43,25 +44,27 @@ def retrieval_with_idf():
     testset = []
     trainset = []
     cosine_maxs = []
-    print("read test sentense embed...")
+    print("read test sentence embed...")
     with open("./data/test_idf_pro.txt", "r") as fr:
         for ids, line in enumerate(fr):
             testset.append(json.loads(line))
-            if ids % 10000:
-                print("read test sentense embed %d" % ids)
-    print("read test sentense finish!")
-    print("read train sentense embed...")
+            if ids % 10000 == 0:
+                print("read test sentence embed %d" % ids)
+    print("read test sentence finish!")
+    print("read train sentence embed...")
     with open("./data/train_idf_pro.txt", "r") as fr:
         for ids, line in enumerate(fr):
             trainset.append(json.loads(line))
-            print("read train sentense embed %d" % ids)
-    print("read train sentense finish!")
+            print("read train sentence embed %d" % ids)
+            if ids % 100000 == 0:
+                print("read test sentence embed %d" % ids)
+    print("read train sentence finish!")
     with open(RESULT_PATH, "w") as fw:
         for test_data in tqdm(testset):
             cosines = []
-            vec1 = np.array(test_data['sentense_embed'])
+            vec1 = np.array(test_data['sentence_embed'])
             for train_data in trainset:
-                vec2 = np.array(train_data['sentense_embed'])
+                vec2 = np.array(train_data['sentence_embed'])
                 cosine = cal_cosine(vec1, vec2)
                 cosines.append(cosine)
             cosine_max = max(cosines)
