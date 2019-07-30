@@ -36,8 +36,8 @@ def process_trainset():
                 sentence_embed = np.array(sentence_embed).mean(axis=0).tolist()
                 data = {'response': response, 'sentence_embed': sentence_embed}
                 fw.write(json.dumps(data) + "\n")
-            if ids % 100000 == 0:
-                print("process trainset %d" % ids)
+                if ids % 100000 == 0:
+                    print("process trainset %d" % ids)
     print("process trainset finish!")
 
 def process_testset():
@@ -62,8 +62,8 @@ def process_testset():
                 sentence_embed = np.array(sentence_embed).mean(axis=0).tolist()
                 data = {'post': post, 'response': response, 'sentence_embed': sentence_embed}
                 fw.write(json.dumps(data) + "\n")
-            if ids % 10000 == 0:
-                print("process testset %d" % ids)
+                if ids % 10000 == 0:
+                    print("process testset %d" % ids)
     print("process testset finish!")
     print("word in testset not in vocab %d" % not_in_vocabulary)
     print("word in testset not in vocab rate %f" % (1.0*not_in_vocabulary/np.array(post_len).sum()))
