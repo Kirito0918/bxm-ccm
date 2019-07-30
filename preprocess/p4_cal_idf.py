@@ -43,7 +43,7 @@ def cal_idf():
         idf = math.log10(1.0*num_trainset/count)
         idfs[word] = idf
     print("calculate idf finish!")
-    with open("./testdata/idf.txt", "w") as fw:
+    with open("./data/idf.txt", "w") as fw:
         fw.write(json.dumps(idfs))
 
 if __name__ == '__main__':

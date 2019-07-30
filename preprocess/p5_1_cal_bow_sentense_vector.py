@@ -45,7 +45,7 @@ def process_trainset():
 def process_testset():
     vocab = load_vocabulary()
     post_len = []
-    not_in_vocabulary = 0
+    not_in_vocabulary = 0  # 测试集post中单词不存在于词汇表的数量
     print("process testset...")
     with open("./data/test.txt", "r") as fr:
         with open("./data/test_bow_pro.txt", "w") as fw:
@@ -70,6 +70,9 @@ def process_testset():
     print("word in testset not in vocab %d" % not_in_vocabulary)
     print("word in testset not in vocab rate %f" % (1.0*not_in_vocabulary/np.array(post_len).sum()))
 
-if __name__ == '__main__':
+def cal_bow_embed():
     process_trainset()
     process_testset()
+
+if __name__ == '__main__':
+    cal_bow_embed()
