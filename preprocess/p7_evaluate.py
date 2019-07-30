@@ -6,7 +6,7 @@ from config import RESULT_PATH
 def evaluate():
     bleus, bleus1, bleus2, bleus3, bleus4 = [], [], [], [], []
     with open(RESULT_PATH, "r") as fr:
-        for line in fr:
+        for ids, line in enumerate(fr):
             line = json.loads(line)
             references = [line['response']]
             hypothesis = line['retrieval']
@@ -20,6 +20,8 @@ def evaluate():
             bleus3.append(bleu3)
             bleu4 = sentence_bleu(references, hypothesis, weights=[0, 0, 0, 1])
             bleus4.append(bleu4)
+            if ids % 10000 == 0:
+                print("evaluate %d" % ids)
     print("avg bleu %f" % np.array(bleus).mean())
     print("avg bleu-1 %f" % np.array(bleus1).mean())
     print("avg bleu-2 %f" % np.array(bleus2).mean())
