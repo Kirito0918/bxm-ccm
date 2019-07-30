@@ -50,7 +50,7 @@ def process_trainset():
                 sentence_embed = (np.array(sentence_embed) * sentence_weight).mean(axis=0).tolist()
                 data = {'response': response, 'sentence_embed': sentence_embed}
                 fw.write(json.dumps(data) + "\n")
-                if ids % 10000 == 0:
+                if ids % 100000 == 0:
                     print("process trainset %d" % ids)
     print("process trainset finish!")
 
