@@ -27,14 +27,14 @@ def process_trainset():
             for ids, line in enumerate(fr):
                 line = json.loads(line)
                 response = line['response']
-                sentense_embed = []
+                sentence_embed = []
                 for word in response:
                     if word in vocab:
-                        sentense_embed.append(vocab[word])
+                        sentence_embed.append(vocab[word])
                     else:
-                        sentense_embed.append(vocab[UNK_TOKEN])
-                sentense_embed = np.array(sentense_embed).mean(axis=0).tolist()
-                data = {'response': response, 'sentense_embed': sentense_embed}
+                        sentence_embed.append(vocab[UNK_TOKEN])
+                sentence_embed = np.array(sentence_embed).mean(axis=0).tolist()
+                data = {'response': response, 'sentence_embed': sentence_embed}
                 fw.write(json.dumps(data) + "\n")
             if ids % 100000 == 0:
                 print("process trainset %d" % ids)
@@ -52,15 +52,15 @@ def process_testset():
                 post = line['post']
                 post_len.append(len(post))
                 response = line['response']
-                sentense_embed = []
+                sentence_embed = []
                 for word in post:
                     if word in vocab:
-                        sentense_embed.append(vocab[word])
+                        sentence_embed.append(vocab[word])
                     else:
-                        sentense_embed.append(vocab[UNK_TOKEN])
+                        sentence_embed.append(vocab[UNK_TOKEN])
                         not_in_vocabulary += 1
-                sentense_embed = np.array(sentense_embed).mean(axis=0).tolist()
-                data = {'post': post, 'response': response, 'sentense_embed': sentense_embed}
+                sentence_embed = np.array(sentence_embed).mean(axis=0).tolist()
+                data = {'post': post, 'response': response, 'sentence_embed': sentence_embed}
                 fw.write(json.dumps(data) + "\n")
             if ids % 10000 == 0:
                 print("process testset %d" % ids)

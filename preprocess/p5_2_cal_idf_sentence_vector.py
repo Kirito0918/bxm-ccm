@@ -3,7 +3,7 @@ import json
 import numpy as np
 
 def load_idf():
-    fr = open("./idf.text", "r")
+    fr = open("./data/idf.txt", "r")
     idf = json.loads(fr.readline())
     fr.close()
     return idf
@@ -42,9 +42,9 @@ def process_trainset():
                     else:
                         sentence_embed.append(vocab[UNK_TOKEN])
                     if word in idf:
-                        sentence_weight.append(idf[word])
+                        sentence_weight.append([idf[word]])
                     else:
-                        sentence_weight.append(0.0)
+                        sentence_weight.append([0.0])
                 sentence_weight = np.array(sentence_weight)
                 sentence_weight = sentence_weight / sentence_weight.sum()
                 sentence_embed = (np.array(sentence_embed) * sentence_weight).mean(axis=0).tolist()
@@ -76,9 +76,9 @@ def process_testset():
                         sentence_embed.append(vocab[UNK_TOKEN])
                         not_in_vocabulary += 1
                     if word in idf:
-                        sentence_weight.append(idf[word])
+                        sentence_weight.append([idf[word]])
                     else:
-                        sentence_weight.append(0.0)
+                        sentence_weight.append([0.0])
                 sentence_weight = np.array(sentence_weight)
                 sentence_weight = sentence_weight / sentence_weight.sum()
                 sentence_embed = (np.array(sentence_embed) * sentence_weight).mean(axis=0).tolist()
