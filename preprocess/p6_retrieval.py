@@ -24,7 +24,7 @@ from config import METHOD, RESULT_PATH, RETRIEVAL_SCOPE
 #             if ids % 100000 == 0:
 #                 print("read train sentence embed %d" % ids)
 #     print("read train sentence finish!")
-#     with open(RESULT_PATH, "w") as fw:
+#     with open(RESULT_PATH + ".txt", "w") as fw:
 #         for test_data in tqdm(testset):
 #             cosines = []
 #             vec1 = np.array(test_data['sentence_embed'])
@@ -58,7 +58,7 @@ from config import METHOD, RESULT_PATH, RETRIEVAL_SCOPE
 #             if ids % 100000 == 0:
 #                 print("read train sentence embed %d" % ids)
 #     print("read train sentence finish!")
-#     with open(RESULT_PATH, "w") as fw:
+#     with open(RESULT_PATH + ".txt", "w") as fw:
 #         for test_data in tqdm(testset):
 #             cosines = []
 #             vec1 = np.array(test_data['sentence_embed'])
@@ -102,7 +102,7 @@ def retrieval_with_bow():
     print("read train sentence finish!")
     train_sentence_embed = np.array(train_sentence_embed)
     len_trainset = len(trainset)
-    with open(RESULT_PATH, "w") as fw:
+    with open(RESULT_PATH + ".txt", "w") as fw:
         for test_data in tqdm(testset):
             test_sentence_embed = np.array([test_data['sentence_embed']*len_trainset]).reshape((len_trainset, 300))
             cosines = cal_cosine(train_sentence_embed, test_sentence_embed).tolist()
@@ -139,7 +139,7 @@ def retrieval_with_idf():
     print("read train sentence finish!")
     train_sentence_embed = np.array(train_sentence_embed)
     len_trainset = len(trainset)
-    with open(RESULT_PATH, "w") as fw:
+    with open(RESULT_PATH + ".txt", "w") as fw:
         for test_data in tqdm(testset):
             test_sentence_embed = np.array([test_data['sentence_embed'] * len_trainset]).reshape((len_trainset, 300))
             cosines = cal_cosine(train_sentence_embed, test_sentence_embed).tolist()
