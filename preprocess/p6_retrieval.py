@@ -1,7 +1,7 @@
 import numpy as np
 import json
 from tqdm import tqdm
-from config import METHOD, RESULT_PATH
+from config import METHOD, RESULT_PATH, RETRIEVAL_SCOPE
 
 # def cal_cosine(vec1, vec2):
 #     return (vec1*vec2).sum()/(np.sqrt((vec1*vec1).sum())*np.sqrt((vec2*vec2).sum()))
@@ -91,12 +91,14 @@ def retrieval_with_bow():
     print("read test sentence finish!")
     print("read train sentence embed...")
     with open("./data/train_bow_pro.txt", "r") as fr:
-        for ids, line in enumerate(fr):
+        for ids, line in enumerate(fr, start=1):
             line = json.loads(line)
             trainset.append(line)
             train_sentence_embed.append(line['sentence_embed'])
             if ids % 100000 == 0:
                 print("read train sentence embed %d" % ids)
+            if ids == RETRIEVAL_SCOPE:
+                break
     print("read train sentence finish!")
     train_sentence_embed = np.array(train_sentence_embed)
     len_trainset = len(trainset)
@@ -126,12 +128,14 @@ def retrieval_with_idf():
     print("read test sentence finish!")
     print("read train sentence embed...")
     with open("./data/train_idf_pro.txt", "r") as fr:
-        for ids, line in enumerate(fr):
+        for ids, line in enumerate(fr, start=1):
             line = json.loads(line)
             trainset.append(line)
             train_sentence_embed.append(line['sentence_embed'])
             if ids % 100000 == 0:
                 print("read train sentence embed %d" % ids)
+            if ids == RETRIEVAL_SCOPE:
+                break
     print("read train sentence finish!")
     train_sentence_embed = np.array(train_sentence_embed)
     len_trainset = len(trainset)
