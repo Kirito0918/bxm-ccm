@@ -6,7 +6,7 @@ data_test = []
 data_dev = []
 count = 0
 
-# with open('data/trainset.txt') as f:
+# with open('testdata/trainset.txt') as f:
 #     for idx, line in enumerate(f):
 #         if idx % 100000 == 0:
 #             print('read train file line %d' % idx)
@@ -14,12 +14,12 @@ count = 0
 #         if idx == 100000:
 #             break
 
-# with open('data/validset.txt') as f:
+# with open('testdata/validset.txt') as f:
 #     for idx, line in enumerate(f):
 #         data_dev.append(json.loads(line))
 # print("dev_len", len(data_dev))
 #
-# with open('data/testset.txt') as f:
+# with open('testdata/testset.txt') as f:
 #     for idx, line in enumerate(f):
 #         data_test.append(json.loads(line))
 # print("test_len", len(data_test))

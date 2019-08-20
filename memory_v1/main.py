@@ -20,7 +20,7 @@ tf.app.flags.DEFINE_integer("trans_units", 100, "Size of trans embedding.")  # t
 tf.app.flags.DEFINE_integer("units", 512, "Size of each model layer.")  # 每层的size
 tf.app.flags.DEFINE_integer("layers", 2, "Number of layers in the model.")  # 层数
 tf.app.flags.DEFINE_integer("batch_size", 100, "Batch size to use during training.")  # batch_size
-tf.app.flags.DEFINE_string("data_dir", "./data", "Data directory")  # 数据的目录
+tf.app.flags.DEFINE_string("data_dir", "./testdata", "Data directory")  # 数据的目录
 tf.app.flags.DEFINE_string("train_dir", "./train", "Training directory.")  # 保存模型的目录
 tf.app.flags.DEFINE_integer("per_checkpoint", 5, "How many steps to do per checkpoint.")  # 每多少步保存一下模型
 tf.app.flags.DEFINE_integer("inference_version", 0, "The version for inferencing.")  # 推导的版本
@@ -156,7 +156,7 @@ def build_vocab(path, raw_vocab, trans='transE'):
 def gen_batched_data(data):
     """
     格式化一批数据
-    data: 数据集
+    testdata: 数据集
     """
     global csk_entities, csk_triples, kb_dict  # 实体列表，三元组列表，知识图字典
     encoder_len = max([len(item['post']) for item in data])+1  # 所有 post 长度的最大值 +1
@@ -292,7 +292,7 @@ def get_steps(train_dir):
     for filename in filenames:
         if 'meta' in filename:
             metafiles.append(filename)
-        if 'data' in filename:
+        if 'testdata' in filename:
             datafiles.append(filename)
         if 'index' in filename:
             indexfiles.append(filename)
