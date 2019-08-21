@@ -10,7 +10,7 @@ import random
 random.seed(time.time())
 from model import Model, _START_VOCAB
 
-tf.app.flags.DEFINE_boolean("is_train", False, "Set to False to inference.")  # 是否训练
+tf.app.flags.DEFINE_boolean("is_train", True, "Set to False to inference.")  # 是否训练
 tf.app.flags.DEFINE_integer("memory_units", 100, "memory vector size.")  # 记忆向量的维度
 tf.app.flags.DEFINE_integer("symbols", 30000, "vocabulary size.")  # 词汇表size
 tf.app.flags.DEFINE_integer("num_entities", 21471, "entitiy vocabulary size.")  # 实体词汇size
@@ -20,7 +20,7 @@ tf.app.flags.DEFINE_integer("trans_units", 100, "Size of trans embedding.")  # t
 tf.app.flags.DEFINE_integer("units", 512, "Size of each model layer.")  # 每层的size
 tf.app.flags.DEFINE_integer("layers", 2, "Number of layers in the model.")  # 层数
 tf.app.flags.DEFINE_integer("batch_size", 100, "Batch size to use during training.")  # batch_size
-tf.app.flags.DEFINE_string("data_dir", "./testdata", "Data directory")  # 数据的目录
+tf.app.flags.DEFINE_string("data_dir", "./data", "Data directory")  # 数据的目录
 tf.app.flags.DEFINE_string("train_dir", "./train", "Training directory.")  # 保存模型的目录
 tf.app.flags.DEFINE_integer("per_checkpoint", 5, "How many steps to do per checkpoint.")  # 每多少步保存一下模型
 tf.app.flags.DEFINE_integer("inference_version", 0, "The version for inferencing.")  # 推导的版本
@@ -56,7 +56,7 @@ def prepare_data(path, is_train=True):
     # 载入训练集
     if is_train:
         with open('%s/trainset.txt' % path) as f:
-            for idx, line in enumerate(f):
+            for idx, line in enumerate(f, start=1):
                 if idx % 100000 == 0:
                     print('read train file line %d' % idx)
                 data_train.append(json.loads(line))
@@ -69,7 +69,7 @@ def prepare_data(path, is_train=True):
             data_dev.append(json.loads(line))
 
     # 载入测试集
-    with open('%s/testset.txt' % path) as f:
+    with open('%s/test_set.txt' % path) as f:
         for line in f:
             data_test.append(json.loads(line))
 
@@ -236,18 +236,36 @@ def gen_batched_data(data):
                 entity.append([csk_entities[x] for x in ent] + ['_NONE'] * (triple_len-len(ent)))
             entities.append(entity+[['_NONE']*triple_len]*(triple_num-len(entity)))
 
+    if FLAGS.is_train:
+        batched_data = {'posts': np.array(posts),
+                        'responses': np.array(responses),
+                        'posts_length': posts_length,
+                        'responses_length': responses_length,
+                        'triples': np.array(all_triples),
+                        'entities': np.array(entities),
+                        'posts_triple': np.array(post_triples),
+                        'responses_triple': np.array(response_triples),
+                        'match_triples': np.array(match_triples)}
+        return batched_data
+    else:
+        retrievals_len = max([len(item['retrieval']) for item in data]) + 1
+        retrievals_length, retrievals = [], []
+        for item in data:
+            retrievals.append(padding(item['retrieval'], retrievals_len))
+            retrievals_length.append(len(item['retrieval']) + 1)
+        batched_data = {'posts': np.array(posts),
+                        'responses': np.array(responses),
+                        'posts_length': posts_length,
+                        'responses_length': responses_length,
+                        'triples': np.array(all_triples),
+                        'entities': np.array(entities),
+                        'posts_triple': np.array(post_triples),
+                        'responses_triple': np.array(response_triples),
+                        'match_triples': np.array(match_triples),
+                        'retrievals': np.array(retrievals),
+                        'retrievals_length': np.array(retrievals_length)}
+        return batched_data
 
-    batched_data = {'posts': np.array(posts),
-                    'responses': np.array(responses),
-                    'posts_length': posts_length,
-                    'responses_length': responses_length,
-                    'triples': np.array(all_triples),
-                    'entities': np.array(entities),
-                    'posts_triple': np.array(post_triples),
-                    'responses_triple': np.array(response_triples),
-                    'match_triples': np.array(match_triples)}
-
-    return batched_data
 
 # 训练模型
 def train(model, sess, data_train):
@@ -338,7 +356,9 @@ def test(sess, saver, data_dev, setnum=5000):
                      'triples:0': batched_data['triples'],
                      'match_triples:0': batched_data['match_triples'],
                      'enc_triples:0': batched_data['posts_triple'],
-                     'dec_triples:0': batched_data['responses_triple']})
+                     'dec_triples:0': batched_data['responses_triple'],
+                     'ret_inps:0': batched_data['retrievals'],
+                     'ret_lens:0': batched_data['retrievals_length']})
                 loss += [x for x in ppx_loss]
                 ###
                 responses = [[str(word, encoding="utf-8") for word in response] for response in responses.tolist()]
@@ -355,10 +375,11 @@ def test(sess, saver, data_dev, setnum=5000):
 ############                                                                                                         ###
             match_entity_sum = [.0] * 4  # [0.0, 0.0, 0.0, 0.0]
             cnt = 0  #
-            for post, response, result, match_triples, triples, entities in \
+            for post, response, result, retrieval, match_triples, triples, entities in \
                     zip([data['post'] for data in data_dev],
                         [data['response'] for data in data_dev],
                         results,
+                        [data['retrieval'] for data in data_dev],
                         [data['match_triples'] for data in data_dev],  # 回复中用到的三元组的id
                         [data['all_triples'] for data in data_dev],  # 与post中关键词相关的所有三元组的id
                         [data['all_entities'] for data in data_dev]):  # 与post中关键词相关的所有三元组中出现的实体id
@@ -375,8 +396,8 @@ def test(sess, saver, data_dev, setnum=5000):
                     if word not in stopwords and word in entities:
                         result_matched_entities.append(word)
                 #
-                outfile.write('post: %s\nresponse: %s\nresult: %s\nmatch_entity: %s\n\n'
-                              % (' '.join(post), ' '.join(response), ' '.join(result), ' '.join(result_matched_entities)))
+                outfile.write('post: %s\nresponse: %s\nresult: %s\nretrieval: %s\nmatch_entity: %s\n\n'
+                              % (' '.join(post), ' '.join(response), ' '.join(result),' '.join(retrieval), ' '.join(result_matched_entities)))
                 match_entity_sum[setidx] += len(set(result_matched_entities))
                 cnt += 1
             # 将测试集划成4个部分，记录了每个部分的匹配率

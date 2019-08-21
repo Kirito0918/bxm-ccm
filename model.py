@@ -36,7 +36,10 @@ class Model(object):
             mem_use=True,
             output_alignments=True,
             use_lstm=False):
-        
+
+        self.retrievals_length = tf.placeholder(tf.int32, (None), 'ret_lens')  # [batch_size]
+        self.retrievals = tf.placeholder(tf.string, (None, None), 'ret_inps')  # [batch_size, retrievals_len]
+
         self.posts = tf.placeholder(tf.string, (None, None), 'enc_inps')  # [batch_size, encoder_len]
         self.posts_length = tf.placeholder(tf.int32, (None), 'enc_lens')  # [batch_size]
         self.responses = tf.placeholder(tf.string, (None, None), 'dec_inps')  # [batch_size, decoder_len]
@@ -63,7 +66,7 @@ class Model(object):
                 key_dtype=tf.string,  # key张量的类型
                 value_dtype=tf.int64,  # value张量的类型
                 default_value=UNK_ID,  # 缺少key的默认值
-                shared_name="in_table",  # If non-empty, this table will be shared under the given name across multiple sessions
+                # shared_name="in_table",  # If non-empty, this table will be shared under the given name across multiple sessions
                 name="in_table",  # 操作名
                 checkpoint=True)  # if True, the contents of the table are saved to and restored from checkpoints. If shared_name is empty for a checkpointed table, it is shared using the table node name.
 
@@ -72,7 +75,7 @@ class Model(object):
                 key_dtype=tf.int64,
                 value_dtype=tf.string,
                 default_value='_UNK',
-                shared_name="out_table",
+                # shared_name="out_table",
                 name="out_table",
                 checkpoint=True)
 
@@ -81,7 +84,7 @@ class Model(object):
                 key_dtype=tf.string,
                 value_dtype=tf.int64,
                 default_value=NONE_ID,
-                shared_name="entity_in_table",
+                # shared_name="entity_in_table",
                 name="entity_in_table",
                 checkpoint=True)
 
@@ -90,7 +93,7 @@ class Model(object):
                 key_dtype=tf.int64,
                 value_dtype=tf.string,
                 default_value='_NONE',
-                shared_name="entity_out_table",
+                # shared_name="entity_out_table",
                 name="entity_out_table",
                 checkpoint=True)
 
@@ -124,10 +127,10 @@ class Model(object):
         padding_entity = tf.get_variable('entity_padding_embed', [7, num_trans_units], dtype=tf.float32, initializer=tf.zeros_initializer())
         self.entity_embed = tf.concat([padding_entity, self.entity_trans_transformed], axis=0)
 
-        # triples_embedding: [batch_size, triple_num, triple_len, 3*num_trans_units] 知识图三元组的嵌入
+        # triples_embedding: 知识图三元组的嵌入 [batch_size, triple_num, triple_len, 3*num_trans_units]
         triples_embedding = tf.reshape(tf.nn.embedding_lookup(self.entity_embed, self.entity2index.lookup(self.triples)),
                                        [encoder_batch_size, triple_num, -1, 3 * num_trans_units])
-        # entities_word_embedding: [batch_size, triple_num*triple_len, num_embed_units] 知识图中用到的所有实体的嵌入
+        # entities_word_embedding: 知识图中用到的所有实体的嵌入 [batch_size, triple_num*triple_len, num_embed_units]
         entities_word_embedding = tf.reshape(tf.nn.embedding_lookup(self.embed, self.symbol2index.lookup(self.entities)),
                                              [encoder_batch_size, -1, num_embed_units])
         # 分离知识图三元组的头、关系和尾 [batch_size, triple_num, triple_len, num_trans_units]
@@ -180,6 +183,14 @@ class Model(object):
         post_word_input = tf.nn.embedding_lookup(self.embed, self.posts_word_id)  # [batch_size, encoder_len, num_embed_units]
         response_word_input = tf.nn.embedding_lookup(self.embed, self.responses_word_id)  # [batch_size, decoder_len, num_embed_units]
 
+        #### 190821 ####
+        retrievals_len = tf.shape(self.retrievals)[1]
+        self.retrievals_target = self.symbol2index.lookup(self.retrievals)
+        self.retrievals_word_id = tf.concat([tf.ones([batch_size, 1], dtype=tf.int64) * GO_ID,
+                                             tf.split(self.retrievals_target, [retrievals_len - 1, 1], 1)[0]], 1)
+        retrieval_word_input = tf.nn.embedding_lookup(self.embed, self.retrievals_word_id)
+        ################
+
         # post_word_input和graph_embed_input拼接构成编码器输入 [batch_size, encoder_len, num_embed_units+2*num_trans_units]
         # self.encoder_input = tf.concat([post_word_input, graph_embed_input], axis=2)
         # response_word_input和triple_embed_input拼接构成解码器输入 [batch_size, decoder_len, num_embed_units+3*num_trans_units]
@@ -197,11 +208,13 @@ class Model(object):
 
 ########记忆网络                                                                                                     ###
         response_encoder_cell = MultiRNNCell([GRUCell(num_units) for _ in range(num_layers)])
-        response_encoder_output, response_encoder_state = tf.nn.dynamic_rnn(response_encoder_cell,
-                                                                            response_word_input,
-                                                                            self.responses_length,
-                                                                            dtype=tf.float32,
-                                                                            scope="response_encoder")
+
+        with tf.variable_scope('rep_encoder'):
+            response_encoder_output, response_encoder_state = tf.nn.dynamic_rnn(response_encoder_cell,
+                                                                                response_word_input,
+                                                                                self.responses_length,
+                                                                                dtype=tf.float32,
+                                                                                scope="response_encoder")
 
         # graph_embed: [batch_size, triple_num, 2*num_trans_units] 静态图向量
         # encoder_state: [num_layers, batch_size, num_units]
@@ -255,6 +268,68 @@ class Model(object):
             memory_hidden_state = tf.reshape(memory_hidden_state, (num_layers * batch_size, num_units))
             # [num_layers, batch_size, num_units]
             memory_hidden_state = tuple(tf.split(memory_hidden_state, [batch_size] * num_layers, axis=0))
+            # self.memory_hidden_state_shape = tf.shape(memory_hidden_state)
+
+        # 测试时的记忆网络
+        with tf.variable_scope('rep_encoder', reuse=True):
+            t_response_encoder_output, t_response_encoder_state = tf.nn.dynamic_rnn(response_encoder_cell,
+                                                                                    retrieval_word_input,
+                                                                                    self.responses_length,
+                                                                                    dtype=tf.float32,
+                                                                                    scope="response_encoder")
+
+        # graph_embed: [batch_size, triple_num, 2*num_trans_units] 静态图向量
+        # encoder_state: [num_layers, batch_size, num_units]
+        with tf.variable_scope("post_memory_network", reuse=True):
+            # 将静态知识图转化成输入向量m
+            t_post_input = tf.layers.dense(graph_embed, memory_units, use_bias=False, name="post_weight_a", reuse=True)
+            t_post_input = tf.tile(tf.reshape(t_post_input, (1, encoder_batch_size, triple_num, memory_units)),
+                                   multiples=(num_layers, 1, 1, 1))  # [num_layers, batch_size, triple_num, memory_units]
+            # 将静态知识库转化成输出向量c
+            t_post_output = tf.layers.dense(graph_embed, memory_units, use_bias=False, name="post_weight_c", reuse=True)
+            t_post_output = tf.tile(tf.reshape(t_post_output, (1, encoder_batch_size, triple_num, memory_units)),
+                                    multiples=(num_layers, 1, 1, 1))  # [num_layers, batch_size, triple_num, memory_units]
+            # 将question转化成状态向量u
+            t_encoder_hidden_state = tf.reshape(tf.concat(encoder_state, axis=0), (num_layers, encoder_batch_size, num_units))
+            t_post_state = tf.layers.dense(t_encoder_hidden_state, memory_units, use_bias=False, name="post_weight_b", reuse=True)
+            t_post_state = tf.tile(tf.reshape(t_post_state, (num_layers, encoder_batch_size, 1, memory_units)),
+                                   multiples=(1, 1, triple_num, 1))  # [num_layers, batch_size, triple_num, memory_units]
+            # 概率p
+            t_post_p = tf.reshape(tf.nn.softmax(tf.reduce_sum(t_post_state * t_post_input, axis=3)),
+                                  (num_layers, encoder_batch_size, triple_num, 1))  # [num_layers, batch_size, triple_num, 1]
+            # 输出o
+            t_post_o = tf.reduce_sum(t_post_output*t_post_p, axis=2)  # [num_layers, batch_size, memory_units]
+            t_post_xstar = tf.concat([tf.layers.dense(t_post_o, memory_units, use_bias=False, name="post_weight_r", reuse=True),
+                                      encoder_state], axis=2)  # [num_layers, batch_size, num_units+memory_units]
+
+        with tf.variable_scope("response_memory_network", reuse=True):
+            # 将静态知识图转化成输入向量m
+            t_response_input = tf.layers.dense(graph_embed, memory_units, use_bias=False, name="response_weight_a", reuse=True)
+            t_response_input = tf.tile(tf.reshape(t_response_input, (1, batch_size, triple_num, memory_units)),
+                                       multiples=(num_layers, 1, 1, 1))  # [num_layers, batch_size, triple_num, memory_units]
+            # 将静态知识库转化成输出向量c
+            t_response_output = tf.layers.dense(graph_embed, memory_units, use_bias=False, name="response_weight_c", reuse=True)
+            t_response_output = tf.tile(tf.reshape(t_response_output, (1, batch_size, triple_num, memory_units)),
+                                        multiples=(num_layers, 1, 1, 1))  # [num_layers, batch_size, triple_num, memory_units]
+            # 将question转化成状态向量u
+            t_response_hidden_state = tf.reshape(tf.concat(t_response_encoder_state, axis=0), (num_layers, batch_size, num_units))
+            t_response_state = tf.layers.dense(t_response_hidden_state, memory_units, use_bias=False, name="response_weight_b", reuse=True)
+            t_response_state = tf.tile(tf.reshape(t_response_state, (num_layers, batch_size, 1, memory_units)),
+                                       multiples=(1, 1, triple_num, 1))  # [num_layers, batch_size, triple_num, memory_units]
+            # 概率p
+            t_response_p = tf.reshape(tf.nn.softmax(tf.reduce_sum(t_response_state * t_response_input, axis=3)),
+                                      (num_layers, batch_size, triple_num, 1))  # [num_layers, batch_size, triple_num, 1]
+            # 输出o
+            t_response_o = tf.reduce_sum(t_response_output*t_response_p, axis=2)  # [num_layers, batch_size, memory_units]
+            t_response_ystar = tf.concat([tf.layers.dense(t_response_o, memory_units, use_bias=False, name="response_weight_r", reuse=True),
+                                          t_response_encoder_state], axis=2)  # [num_layers, batch_size, num_units+memory_units]
+
+        with tf.variable_scope("memory_network", reuse=True):
+            t_memory_hidden_state = tf.layers.dense(tf.concat([t_post_xstar, t_response_ystar], axis=2),
+                                                    num_units, use_bias=False, activation=tf.tanh, name="output_weight", reuse=True)
+            t_memory_hidden_state = tf.reshape(t_memory_hidden_state, (num_layers * batch_size, num_units))
+            # [num_layers, batch_size, num_units]
+            t_memory_hidden_state = tuple(tf.split(t_memory_hidden_state, [batch_size] * num_layers, axis=0))
             # self.memory_hidden_state_shape = tf.shape(memory_hidden_state)
 ########                                                                                                             ###
 
@@ -310,7 +385,7 @@ class Model(object):
 
             decoder_fn_inference = \
                 attention_decoder_fn_inference(output_fn,
-                                               memory_hidden_state,
+                                               t_memory_hidden_state,
                                                attention_keys,
                                                attention_values,
                                                attention_score_fn,
