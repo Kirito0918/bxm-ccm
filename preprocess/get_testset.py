@@ -25,3 +25,7 @@ for _ in tqdm(range(20000)):
         print(_)
         break
 
+ft.close()
+fr.close()
+fw.close()
+
