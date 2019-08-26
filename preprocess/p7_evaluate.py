@@ -5,8 +5,10 @@ from config import RESULT_PATH
 
 def evaluate():
     bleus, bleus1, bleus2, bleus3, bleus4 = [], [], [], [], []
-    with open(RESULT_PATH, "r") as fr:
+    with open(RESULT_PATH + '.txt', "r") as fr:
         for ids, line in enumerate(fr):
+            if ids == 0:
+                continue
             line = json.loads(line)
             references = [line['response']]
             hypothesis = line['retrieval']
