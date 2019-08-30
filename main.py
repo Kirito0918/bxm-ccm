@@ -359,7 +359,7 @@ def test(sess, saver, data_dev, setnum=5000):
                      'dec_triples:0': batched_data['responses_triple'],
                      'ret_inps:0': batched_data['retrievals'],
                      'ret_lens:0': batched_data['retrievals_length']})
-                loss += [x for x in ppx_loss]
+                loss += [x for x in ppx_loss]  # ppx_loss: [batch_size] 每个样本每个单词的损失
                 ###
                 responses = [[str(word, encoding="utf-8") for word in response] for response in responses.tolist()]
                 ###
@@ -402,7 +402,7 @@ def test(sess, saver, data_dev, setnum=5000):
                 cnt += 1
             # 将测试集划成4个部分，记录了每个部分的匹配率
             match_entity_sum = [m / setnum for m in match_entity_sum] + [sum(match_entity_sum) / len(data_dev)]
-            # 将测试集划成4个部分，记录了每个部分的损失
+            # 将测试集划成4个部分，记录了每个部分的损失，平均每个batch每个单词的损失
             losses = [np.sum(loss[x:x+setnum]) / float(setnum) for x in range(0, setnum*4, setnum)] + [np.sum(loss) / float(setnum*4)]
             losses = [np.exp(x) for x in losses]
             def show(x):
